@@ -163,9 +163,6 @@ MyTinyWebServer:一个Linux下C++轻量级Web服务器
 
 
 
-===============
-Timer
->* 服务器首先创建定时器容器链表，然后用统一事件源将异常事件，读写事件和信号事件统一处理，根据不同事件的对应逻辑使用定时器。
 
 
 webbench -c 500 -t 5 http://127.0.0.1:5678/6
@@ -173,15 +170,21 @@ webbench -c 500 -t 5 http://127.0.0.1:5678/6
 Benchmarking: GET http://127.0.0.1:5678/6
 500 clients, running 5 sec.
 
-//时间轮定时器 + redis
++ 版本v1：时间轮定时器 + redis
+```
 Speed=944496 pages/min, 1763059 bytes/sec.
 Requests: 78708 susceed, 0 failed
+```
 
-//时间轮定时器 + mysql
++ 版本v2：时间轮定时器 + mysql
+```
 Speed=1134156 pages/min, 2117068 bytes/sec.
 Requests: 94513 susceed, 0 failed.
+```
 
 
-//链表定时器 + myql
++ 社长版：链表定时器 + myql
+```
 Speed=1123788 pages/min, 2097715 bytes/sec.
 Requests: 93649 susceed, 0 failed.
+```
