@@ -2,7 +2,7 @@
  * @Author: hancheng 
  * @Date: 2020-07-12 14:13:23 
  * @Last Modified by: hancheng
- * @Last Modified time: 2020-07-14 10:31:30
+ * @Last Modified time: 2020-07-25 21:09:43
  */
 
 #include <sys/socket.h>
@@ -27,6 +27,7 @@
 #include "../log/log.h"
 #include "../CGImysql/sql_connection_pool.h"
 
+#include "../utils/createTable.h"
 
 const int  MAX_FD = 65536  ; //最大文件描述符
 const int MAX_EVENT_NUMBER = 10000; //最大事件数
@@ -127,11 +128,28 @@ int main(int argc, char *argv[])
     int port = atoi(argv[1]);
 
     addsig(SIGPIPE, SIG_IGN);
+    
+    // //创建数据库连接池
+    // connection_pool *connPool = connection_pool::GetInstance();
+    // connPool->init("localhost", "root", "root", "njpdb", 3306, 8);
+//
+//创建数据库连接池
+    string url = "localhost";
+    string nameuser = "root";
+    string passwd = "root";
+    int dbport = 3306;
+    unsigned int maxConn = 8;
+    //提前安装mysql
+    string dbname =  "tinywebdb";//"tinywebdb";
+    string tbname = "userinfo";
+    create(url, nameuser, passwd,dbport, dbname, tbname); //建立数据库和表
 
-    //创建数据库连接池
+    //连接池
     connection_pool *connPool = connection_pool::GetInstance();
-    connPool->init("localhost", "root", "root", "njpdb", 3306, 8);
+     connPool->init(url,  nameuser, passwd, dbname, 3306, 8);
+    // connPool->init("localhost", "root", "root", "njpdb", 3306, 8);
 
+//  
     //创建线程池
     threadpool<http_conn> *pool = NULL;
     try

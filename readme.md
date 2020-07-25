@@ -16,27 +16,22 @@ Linux下C++轻量级Web服务器，助力初学者快速实践网络编程，搭
 	* Ubuntu版本16.04
 	* MySQL版本5.7.29
 * 浏览器测试环境
-	* Windows、Linux均可
 	* Chrome
 	* FireFox
-	* 其他浏览器暂无测试
 
-* 测试前确认已安装MySQL数据库
-
-    ```C++
-    // 建立yourdb库
-    create database yourdb;
-
-    // 创建user表
-    USE yourdb;
-    CREATE TABLE user(
-        username char(50) NULL,
-        passwd char(50) NULL
-    )ENGINE=InnoDB;
-
-    // 添加数据
-    INSERT INTO user(username, passwd) VALUES('name', 'passwd');
+* 提前安装MySQL数据库和redis
+* 终端打开mysql
     ```
+        mysql  -u root -p
+    ```
+
+* util 中的 create 指定数据库名和表名即可
+```C++
+    //提前安装mysql
+    string dbname =  "tinywebdb";//"tinywebdb";
+    string tbname = "userinfo";
+```
+* 测试前确认已安装MySQL数据库
 
 * 修改main.c中的数据库初始化信息
 
