@@ -163,12 +163,10 @@ MyTinyWebServer:一个Linux下C++轻量级Web服务器
 
 
 
-
-
+```
 webbench -c 500 -t 5 http://127.0.0.1:5678/6
-
-Benchmarking: GET http://127.0.0.1:5678/6
 500 clients, running 5 sec.
+```
 
 + 版本v1：时间轮定时器 + redis
 ```
