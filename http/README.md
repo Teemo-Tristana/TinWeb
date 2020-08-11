@@ -13,9 +13,9 @@ Other
 ===========================
 + 提取用户名和密码
     - 服务器端解析浏览器的请求报文，当解析为POST请求时，cgi标志位设置为1，并将请求报文的消息体赋值给m_string，进而提取出用户名和密码
-    ![http解析流程](http_resution.PNG)
+    ![http解析流程](./files/http_resution.PNG)
 + 同步线程登陆注册
-    ![GET_POST_process](GET_POST_process.png)
+    ![GET_POST_process](./files/GET_POST_process.png)
     + 通过 m_url 定位 / 所在位置, 根据 / 后的第一个字符判断是登陆还是注册校验
         - 0 跳转到注册页面 GET
         - 1 跳转到登录页面 GET
@@ -33,7 +33,7 @@ HTTP模块
 + **在HTTP报文中，每一行的数据由\r\n作为结束字符，空行则是仅仅是字符\r\n,因此可以通过查看\r\n将报文头拆解为单独的行进行行解析**
 + **在HTTP报文中，请求行用来说明请求类型,要访问的资源以及所使用的HTTP版本，其中各个部分之间通过\t或空格分隔**
 + **GET和POST请求报文的区别之一是有无消息体部分，GET请求没有消息体，当解析完空行之后，便完成了报文的解析。**
-    ![http_read_wirte](http_read_wirte.PNG)
+    ![http_read_wirte](./files/http_read_wirte.PNG)
 + 知识点: 
     + **I/O复用**: Linux下I/O复用系统调用主要有select,poll和epoll 我们这里只用到了epoll
         + select
