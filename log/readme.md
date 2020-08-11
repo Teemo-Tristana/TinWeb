@@ -89,10 +89,12 @@
         
 
 
->* :
-    >>* strrchr(const char* str, int ch) 在str查找 ch 最后出现的位置
-    >>* sprintf(char *stri,char *format,arg_list) 发送格式化输出到 str 所指向的字符串,可能导致缓冲区溢出
-    >>* snprintf(char *str, size_t size, const char *format, ...) 和 sprintf()作用相同,提供缓冲区的可用大小传入参数来保证缓冲区的不溢出，如果超出缓冲区大小则进行截断
++ 其他函数:
+    ```
+   size_t sschr(const char* str, int ch); //在str查找 ch 最后出现的位置
+   void sprintf(char *stri,char *format,arg_list); //发送格式化输出到 str 所指向的字符串,可能导致缓冲区溢出
+   void snprintf(char *str, size_t size, const char *format, ...); //和 sprintf()作用相同,提供缓冲区的可用大小传入参数来保证缓冲区的不溢出，如果超出缓冲区大小则进行截断
+   ```
 
 
 
