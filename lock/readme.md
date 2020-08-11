@@ -63,7 +63,7 @@
                     - *阻塞直到获取条件变量*
                     - *获取互斥锁(加锁)*
                 - 释放锁(解锁)
-                ![pthread_cond_wait内部操作](./files/pthread_cond_wait.png)
+                ![pthread_cond_wait内部操作](./TiWeb/lock/files/pthread_cond_wait.png)
 
             + **条件变量API 与陷阱** :
                 - pthread_cond_wait() 用于等待目标条件变量.
