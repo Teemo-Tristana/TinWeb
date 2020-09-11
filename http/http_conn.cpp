@@ -5,41 +5,14 @@
  * @Last Modified time: 2020-07-14 11:06:34
  */
 
-/*
-
-/*
-
-> 在HTTP报文中，每一行的数据由\r\n作为结束字符，空行则是仅仅是字符\r\n,因此可以通过查看\r\n将报文头拆解为单独的行
-进行行解析
-
-> GET和POST请求报文的区别之一是有无消息体部分，GET请求没有消息体，当解析完空行之后，便完成了报文的解析。
-> 后续的登录和注册功能，为了避免将用户名和密码直接暴露在URL中，我们在项目中改用了POST请求，将用户名和密码添加在报文中作为消息体进行了封装
-  为此，我们需要在解析报文的部分添加解析消息体的模块。
-
-循环体写成这样的原因: 
-while((m_check_state == CHECK_STATE_CONTENT && line_status == LINE_OK) || ((line_status = parse_line()) == LINE_OK))
-
-> 在GET请求报文中，每一行都是\r\n作为结束，所以对报文进行拆解时，仅用从状态机的状态line_status=parse_line())==LINE_OK语句即可。
-> 但在POST请求报文中，消息体的末尾没有任何字符，所以不能使用从状态机的状态，这里转而使用主状态机的状态作为循环入口条件。
-> 解析完消息体后，报文的完整解析就完成了，但此时主状态机的状态还是CHECK_STATE_CONTENT，也就是说，符合循环入口条件，还会再次进入循环，这并不是我们所希望的。 
-  为此，增加了该语句，并在完成消息体解析后，将line_status变量更改为LINE_OPEN，此时可以跳出循环，完成报文解析任务。
-见(https://mp.weixin.qq.com/s?__biz=MzAxNzU2MzcwMw==&mid=2649274278&idx=7&sn=d1ab62872c3ddac765d2d80bbebfb0dd&scene=19#wechat_redirect)
-
-知识点(详细见node.md): 
-    > I/O复用: Linux下I/O复用系统调用主要有select,poll和epoll 我们这里只用到了epoll
-    > HTTP格式
-    > 有限状态机
-1. 浏览器发出http请求, 主线程创建http对象并接收请求,将请求数据放入对应buffer中
-    ,将该对象插入任务队列,工作线程从任务队列中取出一个任务进行处理
-
-2.
-*/
-
-#include "http_conn.h"
-#include "../log/log.h"
 #include <map>
 #include <mysql/mysql.h>
 #include <fstream>
+
+#include "http_conn.h"
+#include "../log/log.h"
+
+using namespace std;
 
 //#define connfdET       //边缘触发非阻塞
 #define connfdLT //水平触发阻塞
@@ -57,15 +30,9 @@ const char *error_404_form = "The requested file was not found on this server.\n
 const char *error_500_title = "Internal Error";
 const char *error_500_form = "There was an unusual problem serving the request file.\n";
 
-//当浏览器出现连接重置时，可能是网站根目录出错或http响应格式出错或者访问的文件中内容完全为空
-//root目录下存放请求的资源和html文件
-//const char *doc_root = "/home/ni/code/cpp/raw/copy-TinyWebServer-raw_version/root";
-const char *doc_root = "/home/ni/code/cpp/raw/myTinyWeb/root";
-
-//将数据库的用户名和密码载入到服务器的map中, key是用户名,value是密码
-// map<string, string> userInfo;
+const char *root = "/home/ubuntu16_04/learnGit/TinWeb/root"; //root目录下存放请求的资源和html文件
+map<string, string> userInfo;                                //将数据库的用户名和密码载入到服务器的map中, key是用户名,value是密码
 locker m_lock;
-
 /****************************************epollf模块:epoll相关函数****************************************/
 //将文件描述符设置非阻塞
 int setnonblocking(int fd)
@@ -76,40 +43,6 @@ int setnonblocking(int fd)
     return old_option;
 }
 
-//往内核事件表注册事件
-//将文件描述符fd上的EPOLLIN和EPOLLET事件注册到epollfd指示的epoll内核事件表中,参数one_shot指定是否对fd开启EPOLLONESHOT
-void addfd(int epollfd, int fd, bool one_shot)
-{
-    epoll_event event;
-    event.data.fd = fd;
-/*EPOLLRDHUP 表示读端关闭:
-    1.对端发送FIN(对端使用close或者shutdown(SHUT_WR))
-    2.本端调用shutdown(SHUT_RD), 关闭 SHUT_RD 的场景很少
-*/
-#ifdef connfdET
-    event.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
-#endif
-
-#ifdef connfdLT
-    event.events = EPOLLIN | EPOLLRDHUP;
-#endif
-
-    if (one_shot)
-    {
-        event.events |= EPOLLONESHOT;
-    }
-    /*epoll 即使使用ET模式，一个socket上的某个事件还是可能被触发多次，
-        采用线程城池的方式来处理事件，可能一个socket同时被多个线程处理
-        如果对描述符socket注册了EPOLLONESHOT事件，那么操作系统最多触发其上注册的一个可读、可写或者异常事件，且只触发一次
-        想要下次再触发则必须使用epoll_ctl重置该描述符上注册的事件，包括EPOLLONESHOT 事件。
-        EPOLLONESHOT：只监听一次事件，当监听完这次事件之后，如果还需要继续监听这个socket的话，
-        需要再次把这个socket加入到EPOLL队列里 
-*/
-
-    epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &event);
-    setnonblocking(fd);
-}
-
 //从内核事件表删除描述符
 void removefd(int epollfd, int fd)
 {
@@ -118,64 +51,71 @@ void removefd(int epollfd, int fd)
 }
 
 //将事件重置为EPOLLONESHOT
-void modfd(int epollfd, int fd, int ev)
+void modfd(int epollfd, int fd, int ev, bool is_et = false)
 {
     epoll_event event;
     event.data.fd = fd;
 
-#ifdef connfdET
-    event.events = ev | EPOLLET | EPOLLONESHOT | EPOLLRDHUP;
-#endif
-
-#ifdef connfdLT
-    event.events = ev | EPOLLONESHOT | EPOLLRDHUP;
-#endif
-
+    if (is_et)
+        event.events = ev | EPOLLONESHOT | EPOLLRDHUP | EPOLLET;
+    else
+        event.events = ev | EPOLLONESHOT | EPOLLRDHUP;
     epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &event);
 }
 
+//往内核事件表注册事件
+void addfd(int epollfd, int fd, bool is_oneshot, bool is_et = false)
+{
+    epoll_event event;
+    event.data.fd = fd;
+    if (is_et)
+    {
+        event.events = EPOLLIN | EPOLLRDHUP | EPOLLET;
+    }
+    else
+        event.events = EPOLLIN | EPOLLRDHUP;
+
+    if (is_oneshot)
+        event.events |= EPOLLONESHOT;
+
+    epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &event);
+    setnonblocking(fd); //对应ET模式，必须将fd设置为非阻塞，防止出现饥饿
+}
+
 /******************************************************************************************************/
+//从连接池获取一个数据库连接，将已注册的用户数据载入 userInfo中
+void http_conn::initmysql_result(connection_pool *connPool, string tbname)
+{
+    MYSQL *mysql = NULL;
+    connectionRAII mysqlcon(&mysql, connPool); //先从连接池中取一个连接
 
-// void http_conn::initmysql_result(connection_pool *connPool)
-// {
-//     //先从连接池中取一个连接
-//     MYSQL *mysql = NULL;
-//     connectionRAII mysqlcon(&mysql, connPool);
+    string sqlstring = "select username, passwd from " + tbname + ";";
+    if (mysql_query(mysql, sqlstring.c_str()))
+    {
+        LOG_ERROR("SELECT error:%s\n", mysql_error(mysql));
+    }
 
-//     //在user表中检索username，passwd数据，浏览器端输入
-//     if (mysql_query(mysql, "SELECT username,passwd FROM user"))
-//     {
-//         LOG_ERROR("SELECT error:%s\n", mysql_error(mysql));
-//     }
+    // int num_fields = mysql_num_fields(result);        //返回结果集中的列数
+    MYSQL_RES *result = mysql_store_result(mysql);    //从表中检索完整的结果集
+    MYSQL_FIELD *fields = mysql_fetch_fields(result); //返回所有字段结构的数组
 
-//     //从表中检索完整的结果集
-//     MYSQL_RES *result = mysql_store_result(mysql);
-
-//     //返回结果集中的列数
-//     int num_fields = mysql_num_fields(result);
-
-//     //返回所有字段结构的数组
-//     MYSQL_FIELD *fields = mysql_fetch_fields(result);
-
-//     //从结果集中获取下一行，将对应的用户名和密码，存入map中
-//     //将已注册的用户信息,载入到userInfo,方便后续判断用户是否已存在
-//     while (MYSQL_ROW row = mysql_fetch_row(result))
-//     {
-//         string temp1(row[0]);
-//         string temp2(row[1]);
-//         userInfo[temp1] = temp2;
-//     }
-// }
+    //将已注册的用户信息,载入到userInfo,方便后续判断用户是否已存在
+    while (MYSQL_ROW row = mysql_fetch_row(result)) //将结果集的数据载入map中
+    {
+        userInfo[row[0]] = row[1];
+    }
+}
 
 /*******************************************http模块:核心模块********************************************/
 
+//类的静态变量，类中声明，类外初始化
 int http_conn::m_user_count = 0;
 int http_conn::m_epollfd = -1;
 
-//关闭连接，关闭一个连接，客户总量减一
-void http_conn::close_conn(bool real_close)
+//关闭连接socket
+void http_conn::close_conn(bool isClose)
 {
-    if (real_close && (m_sockfd != -1))
+    if (isClose && (m_sockfd != -1))
     {
         removefd(m_epollfd, m_sockfd);
         m_sockfd = -1;
@@ -188,8 +128,9 @@ void http_conn::init(int sockfd, const sockaddr_in &addr)
 {
     m_sockfd = sockfd;
     m_address = addr;
-    //int reuse=1;
-    //setsockopt(m_sockfd,SOL_SOCKET,SO_REUSEADDR,&reuse,sizeof(reuse));
+    //端口复用设置，调试用
+    int reuse = 1;
+    setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
     addfd(m_epollfd, sockfd, true);
     m_user_count++;
     init();
@@ -203,7 +144,7 @@ void http_conn::init()
     bytes_to_send = 0;
     bytes_have_send = 0;
     m_check_state = CHECK_STATE_REQUESTLINE;
-    m_linger = false;
+    keepALive = false;
     m_method = GET;
     m_url = 0;
     m_version = 0;
@@ -219,87 +160,59 @@ void http_conn::init()
     memset(m_real_file, '\0', FILENAME_LEN);
 }
 
-//从状态机，用于分析出一行内容
-//返回值为行的读取状态，有LINE_OK,LINE_BAD,LINE_OPEN
-http_conn::LINE_STATUS http_conn::parse_line()
+bool http_conn::cfd_LT()
 {
-    char temp;
-    for (; m_checked_idx < m_read_idx; ++m_checked_idx)
-    {
-        temp = m_read_buf[m_checked_idx];
-        if (temp == '\r')
-        {
-            if ((m_checked_idx + 1) == m_read_idx)
-                return LINE_OPEN;
-            else if (m_read_buf[m_checked_idx + 1] == '\n')
-            {
-                m_read_buf[m_checked_idx++] = '\0';
-                m_read_buf[m_checked_idx++] = '\0';
-                return LINE_OK;
-            }
-            return LINE_BAD;
-        }
-        else if (temp == '\n')
-        {
-            if (m_checked_idx > 1 && m_read_buf[m_checked_idx - 1] == '\r')
-            {
-                m_read_buf[m_checked_idx - 1] = '\0';
-                m_read_buf[m_checked_idx++] = '\0';
-                return LINE_OK;
-            }
-            return LINE_BAD;
-        }
-    }
-    return LINE_OPEN;
+    int bytes_read = recv(m_sockfd, m_read_buf + m_read_idx, READ_BUFFER_SIZE - m_read_idx, 0);
+    m_read_idx += bytes_read;
+    if (bytes_read <= 0)
+        return false;
+    return true;
 }
 
-//循环读取客户数据，直到无数据可读或对方关闭连接
-//非阻塞ET工作模式下，需要一次性将数据读完
-bool http_conn::read_once()
+//非阻塞ET工作模式下，需要一次性将数据读完[循环读取客户数据，直到无数据可读或对方关闭连接]，因为 ET模式下只会触发一次
+bool http_conn::cfd_ET()
 {
-    if (m_read_idx >= READ_BUFFER_SIZE)
+    while (1)
     {
-        return false;
-    }
-    int bytes_read = 0;
-
-#ifdef connfdLT
-
-    bytes_read = recv(m_sockfd, m_read_buf + m_read_idx, READ_BUFFER_SIZE - m_read_idx, 0);
-    m_read_idx += bytes_read;
-
-    if (bytes_read <= 0)
-    {
-        return false;
-    }
-
-    return true;
-
-#endif
-
-#ifdef connfdET
-    while (true)
-    {
-        bytes_read = recv(m_sockfd, m_read_buf + m_read_idx, READ_BUFFER_SIZE - m_read_idx, 0);
-        if (bytes_read == -1)
+        int bytes_read = recv(m_sockfd, m_read_buf + m_read_idx, READ_BUFFER_SIZE - m_read_idx, 0);
+        if (-1 == bytes_read)
         {
             if (errno == EAGAIN || errno == EWOULDBLOCK)
                 break;
             return false;
         }
-        else if (bytes_read == 0)
+        else if (0 == bytes_read)
         {
             return false;
         }
         m_read_idx += bytes_read;
     }
     return true;
-#endif
 }
 
-//解析http请求行
+//一次性读完数据
+bool http_conn::read_once(bool is_et)
+{
+    if (m_read_idx >= READ_BUFFER_SIZE)
+    {
+        return false;
+    }
+    bool ret = false;
+    if (is_et)
+    {
+        ret = cfd_ET();
+    }
+    else
+    {
+        ret = cfd_LT();
+    }
+    return ret;
+}
+
+/************************************process_read调用相关函数**************************************/
+//解析http请求行：获取 url，method 和 http版本号
 http_conn::HTTP_CODE http_conn::parse_request_line(char *text)
-{ //获得请求方法，目标url及http版本号
+{
     m_url = strpbrk(text, " \t");
     if (!m_url)
     {
@@ -341,8 +254,41 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char *text)
     //当url为/时，显示判断界面
     if (strlen(m_url) == 1)
         strcat(m_url, "judge.html");
-    m_check_state = CHECK_STATE_HEADER;
+    m_check_state = CHECK_STATE_HEADER; //状态机跳转（从分析请求行 跳转到 分析请求头）
     return NO_REQUEST;
+}
+
+//从状态机， 用于解析出一行内容(http中一行是以\r\n为结束标志的)， \r或\n单独出现在一行中表示出错
+http_conn::LINE_STATUS http_conn::parse_line()
+{
+    char temp = '0';
+    for (; m_checked_idx < m_read_idx; ++m_checked_idx)
+    {
+        temp = m_read_buf[m_checked_idx];
+        if (temp == '\r')
+        {
+            if ((m_checked_idx + 1) == m_read_idx)
+                return LINE_OPEN;
+            else if (m_read_buf[m_checked_idx + 1] == '\n')
+            {
+                m_read_buf[m_checked_idx++] = '\0';
+                m_read_buf[m_checked_idx++] = '\0';
+                return LINE_OK;
+            }
+            return LINE_BAD;
+        }
+        else if (temp == '\n')
+        {
+            if (m_checked_idx > 1 && m_read_buf[m_checked_idx - 1] == '\r')
+            {
+                m_read_buf[m_checked_idx - 1] = '\0';
+                m_read_buf[m_checked_idx++] = '\0';
+                return LINE_OK;
+            }
+            return LINE_BAD;
+        }
+    }
+    return LINE_OPEN;
 }
 
 //解析http请求的一个头部信息
@@ -363,7 +309,7 @@ http_conn::HTTP_CODE http_conn::parse_headers(char *text)
         text += strspn(text, " \t");
         if (strcasecmp(text, "keep-alive") == 0)
         {
-            m_linger = true;
+            keepALive = true;
         }
     }
     else if (strncasecmp(text, "Content-length:", 15) == 0)
@@ -453,11 +399,10 @@ http_conn::HTTP_CODE http_conn::process_read()
 http_conn::HTTP_CODE http_conn::do_request()
 {
 
-    //
-    redis_clt *m_redis = redis_clt::getinstance();
-    //
-    strcpy(m_real_file, doc_root);
-    int len = strlen(doc_root);
+    //使用redis
+    // redis_clt *m_redis = redis_clt::getinstance();
+    strcpy(m_real_file, root);
+    int len = strlen(root);
     //printf("m_url:%s\n", m_url);
     //找到 url 中 / 所在位置,进而判断 / 后的第一个字符
     const char *p = strrchr(m_url, '/'); //在m_url中找到/最后出现的位置
@@ -482,7 +427,7 @@ http_conn::HTTP_CODE http_conn::do_request()
         int i = 0;
 
         printf("m_string : %s\n", m_string);
-        
+
         //以&为分隔符,前面是用户名,后面是密码
         for (i = 5; m_string[i] != '&'; ++i)
             name[i - 5] = m_string[i];
@@ -494,9 +439,7 @@ http_conn::HTTP_CODE http_conn::do_request()
         password[j] = '\0';
         /*********************/
 
-
-
-/*
+        /*
         //调试输出,真正允许时需要注释掉
         for (auto it = userInfo.begin(); it != userInfo.end(); ++it)
         {
@@ -507,8 +450,7 @@ http_conn::HTTP_CODE http_conn::do_request()
 
 */
 
-
-        //同步线程
+        /*同步线程
         if (*(p + 1) == '3') //注册校验
         {
             //
@@ -522,24 +464,25 @@ http_conn::HTTP_CODE http_conn::do_request()
             {
                 cout << "写入 redis 中\n";
                 m_redis->setUserpasswd(name, password);
-                 strcpy(m_url, "/log.html");
+                strcpy(m_url, "/log.html");
             }
             //
+        */
+        printf("*(p+1) = %c\n", *(p + 1));
 
-            /*
+        if (*(p + 1) == '3')
+        {
             //先检测数据库中是否有重名的,没有重名的，进行增加数据
-            char *sql_insert = (char *)malloc(sizeof(char) * 200);
-            strcpy(sql_insert, "INSERT INTO user(username, passwd) VALUES(");
-            strcat(sql_insert, "'");
-            strcat(sql_insert, name);
-            strcat(sql_insert, "', '");
-            strcat(sql_insert, password);
-            strcat(sql_insert, "')");
+            string value1(name);
+            string vlaue2(password);
+            string sqlstring = "insert into userinfo(username, passwd) values( '" + value1 + "', '" + vlaue2 + "');";
+
+            char *sql_insert = const_cast<char *>(sqlstring.c_str());
 
             //判断是否已注册
-            if (userInfo.find(name) == userInfo.end()) 
+            if (userInfo.find(name) == userInfo.end())
             {
-                
+
                 //向数据库插入数据时,需要通过锁来同步数据
                 m_lock.lock();
                 int res = mysql_query(mysql, sql_insert);
@@ -550,18 +493,18 @@ http_conn::HTTP_CODE http_conn::do_request()
 
                 if (!res) //校验成功,跳转到登陆页面
                     strcpy(m_url, "/log.html");
-                else  //校验失败,跳转到注册失败页面
+                else //校验失败,跳转到注册失败页面
                     strcpy(m_url, "/registerError.html");
             }
             else
                 strcpy(m_url, "/registerError.html"); //用户已存在
-            */
         }
         //登陆校验
         else if (*(p + 1) == '2')
         {
-            //
-            if (m_redis->getUserpasswd(name) == password)
+            /*
+            // if (m_redis->getUserpasswd(name) == password)
+            if (userInfo.find(name))
             {
                 // cout <<"使用 redis 测试登录\n";
                 strcpy(m_url, "/welcome.html");
@@ -572,13 +515,12 @@ http_conn::HTTP_CODE http_conn::do_request()
             }
             //
 
-            /*
+            */
             //直接判断浏览器端输入的用户名和密码在userInfo是否中可以查找到，返回1，否则返回0
             if (userInfo.find(name) != userInfo.end() && userInfo[name] == password)
                 strcpy(m_url, "/welcome.html");
             else
                 strcpy(m_url, "/logError.html");
-            */
         }
     }
 
@@ -737,7 +679,7 @@ bool http_conn::write()
             unmap();                             //取消内存映射
             modfd(m_epollfd, m_sockfd, EPOLLIN); //在epoll内核表中重置EPOLLONESHOT
 
-            if (m_linger) //若是长连接
+            if (keepALive) //若是长连接
             {
                 init(); //重新初始化HTTP对象
                 return true;
@@ -800,7 +742,7 @@ bool http_conn::add_content_type()
 //是否保持持久连接
 bool http_conn::add_linger()
 {
-    return add_response("Connection:%s\r\n", (m_linger == true) ? "keep-alive" : "close");
+    return add_response("Connection:%s\r\n", (keepALive == true) ? "keep-alive" : "close");
 }
 
 //添加空行
@@ -903,175 +845,3 @@ void http_conn::process()
     }
     modfd(m_epollfd, m_sockfd, EPOLLOUT);
 }
-
-// /*当得到一个完整且正确的HTTP请求,就分析目标文件的属性,若目标文件存在,可对用户可读且不是目录
-// 就使用mmap将其映射到内存地址m_file_address位置,然后告之调用者文件获取成功*/
-// http_conn::HTTP_CODE http_conn::do_request()
-// {
-
-//     //
-//     redis_clt* m_redis = redis_clt::getinstance();
-//     //
-//     strcpy(m_real_file, doc_root);
-//     int len = strlen(doc_root);
-//     //printf("m_url:%s\n", m_url);
-//     //找到 url 中 / 所在位置,进而判断 / 后的第一个字符
-//     const char *p = strrchr(m_url, '/'); //在m_url中找到/最后出现的位置
-
-//     //处理cgi: 登陆和注册校验
-//     if (cgi == 1 && (*(p + 1) == '2' || *(p + 1) == '3'))
-//     {
-
-//         //根据标志判断是登录检测还是注册检测
-//         char flag = m_url[1];
-
-//         char *m_url_real = (char *)malloc(sizeof(char) * 200);
-//         strcpy(m_url_real, "/");
-//         strcat(m_url_real, m_url + 2);
-//         strncpy(m_real_file + len, m_url_real, FILENAME_LEN - len - 1);
-//         free(m_url_real);
-
-//         /*********************/
-//         //将用户名和密码提取出来
-//         // user=hancheng&password=123 ??明文传输涉及到安全问题??
-//         char name[100], password[100];
-//         int i = 0;
-//         printf("m_string = %s\n", m_string);
-//         //以&为分隔符,前面是用户名,后面是密码
-//         for (i = 5; m_string[i] != '&'; ++i)
-//             name[i - 5] = m_string[i];
-//         name[i - 5] = '\0';
-
-//         int j = 0;
-//         for (i = i + 10; m_string[i] != '\0'; ++i, ++j)
-//             password[j] = m_string[i];
-//         password[j] = '\0';
-//         /*********************/
-
-//         //调试输出,真正允许时需要注释掉
-//         for (auto it = userInfo.begin(); it != userInfo.end(); ++it)
-//         {
-//             cout << "name:" << it->first << "\tpassword:" << it->second << endl;
-//         }
-
-//         printf("*(p+1) = %c\n", *(p + 1));
-
-//         //同步线程
-//         if (*(p + 1) == '3') //注册校验
-//         {
-//             //
-//             bool hasKey = m_redis->is_key_exist(name);
-//             if (hasKey)
-//             {
-//                 cout <<"在 redis 中已经存在关键字: " << name << endl;
-//             }
-//             else
-//             {
-//                 cout <<"写入 redis 中\n";
-//                  m_redis->setUserpasswd(name, password);
-//             }
-//             //
-
-//             //先检测数据库中是否有重名的,没有重名的，进行增加数据
-//             char *sql_insert = (char *)malloc(sizeof(char) * 200);
-//             strcpy(sql_insert, "INSERT INTO user(username, passwd) VALUES(");
-//             strcat(sql_insert, "'");
-//             strcat(sql_insert, name);
-//             strcat(sql_insert, "', '");
-//             strcat(sql_insert, password);
-//             strcat(sql_insert, "')");
-
-//             //判断是否已注册
-//             if (userInfo.find(name) == userInfo.end())
-//             {
-
-//                 //向数据库插入数据时,需要通过锁来同步数据
-//                 m_lock.lock();
-//                 int res = mysql_query(mysql, sql_insert);
-//                 userInfo.insert(pair<string, string>(name, password));
-//                 m_lock.unlock();
-
-//                 LOG_INFO("%s", sql_insert);
-
-//                 if (!res) //校验成功,跳转到登陆页面
-//                     strcpy(m_url, "/log.html");
-//                 else  //校验失败,跳转到注册失败页面
-//                     strcpy(m_url, "/registerError.html");
-//             }
-//             else
-//                 strcpy(m_url, "/registerError.html"); //用户已存在
-//         }
-//         //登陆校验
-//         else if (*(p + 1) == '2')
-//         {
-//             //
-//             if(m_redis->getUserpasswd(name) == password)
-//             {
-//                 cout <<"使用 redis 测试登录\n";
-//             }
-//             //
-
-//             //直接判断浏览器端输入的用户名和密码在userInfo是否中可以查找到，返回1，否则返回0
-//             if (userInfo.find(name) != userInfo.end() && userInfo[name] == password)
-//                 strcpy(m_url, "/welcome.html");
-//             else
-//                 strcpy(m_url, "/logError.html");
-//         }
-//     }
-
-//     if (*(p + 1) == '0') //'0' 注册页面
-//     {
-//         char *m_url_real = (char *)malloc(sizeof(char) * 200);
-//         strcpy(m_url_real, "/register.html");
-//         strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
-//         free(m_url_real);
-//     }
-//     else if (*(p + 1) == '1') //'1' 登录页面
-//     {
-//         char *m_url_real = (char *)malloc(sizeof(char) * 200);
-//         strcpy(m_url_real, "/log.html");
-//         strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
-
-//         free(m_url_real);
-//     }
-//     else if (*(p + 1) == '5') // '5' 图片页面
-//     {
-//         char *m_url_real = (char *)malloc(sizeof(char) * 200);
-//         strcpy(m_url_real, "/picture.html");
-//         strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
-
-//         free(m_url_real);
-//     }
-//     else if (*(p + 1) == '6') //'6' 视频页面
-//     {
-//         char *m_url_real = (char *)malloc(sizeof(char) * 200);
-//         // strcpy(m_url_real, "/video0.html");
-//         strcpy(m_url_real, "/video01.html");
-//         strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
-
-//         free(m_url_real);
-//     }
-//     else if (*(p + 1) == '7') //请求资源为 /6 跳转到fans界面
-//     {
-//         char *m_url_real = (char *)malloc(sizeof(char) * 200);
-//         strcpy(m_url_real, "/fans.html");
-//         strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
-
-//         free(m_url_real);
-//     }
-//     else //否则发送 url 实际请求的文件
-//         strncpy(m_real_file + len, m_url, FILENAME_LEN - len - 1);
-
-//     if (stat(m_real_file, &m_file_stat) < 0)
-//         return NO_RESOURCE;
-//     if (!(m_file_stat.st_mode & S_IROTH))
-//         return FORBIDDEN_REQUEST;
-//     if (S_ISDIR(m_file_stat.st_mode)) //S_ISDIR(st_mode) //判断是否是一个目录
-//         return BAD_REQUEST;
-//     int fd = open(m_real_file, O_RDONLY);
-
-//     //通过mmap映射将文件映射到内存中
-//     m_file_address = (char *)mmap(0, m_file_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-//     close(fd); //关闭文件描述符避免资源的浪费和占用
-//     return FILE_REQUEST;
-// }

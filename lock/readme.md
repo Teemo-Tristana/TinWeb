@@ -75,7 +75,7 @@
                         - **竞争资源[互斥锁], 若成功返回(0),互斥锁再次被加锁**
                     - *也即是所pthread_cond_wait()函数内部会有一次加解锁的操作*
 
-                    ![pthread_cond_wait内部操作](TinWeb/lock/files/pthread_cond_wait.png)
+                    ![pthread_cond_wait内部操作](./files/pthread_cond_wait.png)
 
              + 条件变量的产原因:
                 - 若没有条件变量,则先加锁,进入临界区查看是否满足条件,不满足,解锁离开临界区,过一断时间重复此操作.这样不断加解锁,开销大且费时.

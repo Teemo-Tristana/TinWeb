@@ -2,6 +2,7 @@
 #define REDIS_H
 
 #include <hiredis/hiredis.h>
+
 #include <iostream>
 #include <string.h>
 
