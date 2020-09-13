@@ -60,7 +60,7 @@ Other
 + 一. 服务器基本框架[见书第8章]:
 + 二. I/O模型
 + 三. 事件处理模式
-
+![threadpool.png](./files/I_O.png)
 + I/O方式： 
     + 1. 阻塞I/O: 若无法立即完成会被操作系统挂起等待,直到等待的事件发生为止(程序阻塞于读写)
         - accpet(),send(), recv(), connect()

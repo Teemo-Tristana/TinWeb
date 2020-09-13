@@ -96,14 +96,14 @@ public:
     }
 };
 
+//封装条件变量的类
+class cond
+{
+private:
+    // pthread_mutex_t m_mutex; //在 locker类中，用get函数可以直接获取锁，因此此时mutex可以被替换掉
+    pthread_cond_t m_cond;
 
-//封装条件变量的类 
-class cond{
-    private:
-        // pthread_mutex_t m_mutex; //在 locker类中，用get函数可以直接获取锁，因此此时mutex可以被替换掉
-        pthread_cond_t m_cond;
-
-    public:
+public:
     //创建并初始化条件变量
     cond()
     {
@@ -112,10 +112,6 @@ class cond{
             // perror("pthread_cond_init error\n");
             throw std::exception();
         }
-        // if( 0 != pthread_mutex_init(&m_mutex, NULL))
-        // {
-        //     throw std::exception();
-        // }
     }
 
     //销毁条件变量
@@ -135,7 +131,7 @@ class cond{
     }
 
     //超时等待，如果超时或有信号触发，线程唤醒
-    bool timewait(pthread_mutex_t* m_mutex, struct timespec t)
+    bool timewait(pthread_mutex_t *m_mutex, struct timespec t)
     {
         int ret = 0;
         // pthread_mutex_lock(m_mutex);
@@ -156,4 +152,4 @@ class cond{
     }
 };
 
-#endif 
+#endif

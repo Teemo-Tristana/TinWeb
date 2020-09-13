@@ -21,9 +21,7 @@
 #include "../lock/locker.h"
 #include "../threadpool/threadpool.h"
 
-// #include "../timer/lst_timer.h"
 #include "../timer/timewheel.h"
-
 #include "../http/http_conn.h"
 #include "../log/log.h"
 #include "../CGImysql/sql_connection_pool.h"
@@ -36,12 +34,12 @@ const int TIMESLOT = 5;             //最小超时单位
 
 const int LOG_BUFFER_SIZE = 10240; //日志文件大小
 const int LOG_MAX_LINE = 500000;   //日志行数
-const int LOG_QUEUE_SIZE = 8;      //日志队列
+const int LOG_QUEUE_SIZE = 16;     //日志队列
 
 const int MYSQL_CONNECTION_PORT = 3306;
-const int MYSQL_CONNECTION_NUMBER = 8;
+const int MYSQL_CONNECTION_NUMBER = 16;
 
-//这三个函数在http_conn.cpp中定义，改变链接属性
+//这三个函数在http_conn.cpp中定义，改变链接属性[extern表示该变量或函数在其他文件]
 extern int addfd(int epollfd, int fd, bool is_et, bool is_oneshot);
 extern int removefd(int epollfd, int fd);
 extern int setnonblocking(int fd);
@@ -50,15 +48,15 @@ extern int setnonblocking(int fd);
 static int pipefd[2];
 
 //创建定时器
-// static sort_timer_lst timer_lst; //升序链表
+
 static time_wheel tw; //时间轮
 
 static int epollfd = 0;
 
 /*********************************工具函数************************************/
 /**
- * 信号处理函数:这里采用统一事件源,信号处理函数只起到发信号的作用
- * 这里的信号处理函数只向管道写入数据, 信号处理逻辑在主循环实现
+ * 信号处理函数:这里采用统一事件源：将信号事件当成IO事件，由主循环处理。
+ * 信号处理函数和主循环间通过管道通讯，信号处理函数往管道写。主循环从管道读，然后进行处理
  * 主循环通过epoll监听,管道是否可读,
  */
 //信号处理函数
@@ -70,7 +68,7 @@ void sig_handler(int sig)
     errno = save_errno;
 }
 
-//设置信号的处理函数
+//添加信号处理
 void addsig(int sig, void(handler)(int), bool restart = true)
 {
     struct sigaction sa;
@@ -82,7 +80,7 @@ void addsig(int sig, void(handler)(int), bool restart = true)
     assert(sigaction(sig, &sa, NULL) != -1);
 }
 
-//闹钟函数：定时处理任务，重新定时以不断触发SIGALRM信号
+//闹钟函数：定时处理任务，定期触发SIGALRM信号
 void timer_handler()
 {
     // timer_lst.tick(); //定时处理任务,实际上就是调用tick函数
@@ -90,7 +88,7 @@ void timer_handler()
     alarm(TIMESLOT); //因为一次alarm调用只会引起一次SIGALRM信号,所以我们需要重新定时,以不断触发SIGALRM信号
 }
 
-//定时器回调函数，删除非活动连接在socket上的注册事件，并关闭[从内核事件表删除事件并关闭文件描述符,释放占用的连接资源]
+//定时器回调函数，删除非活动连接，关闭socket上的注册事件，并关闭[从内核事件表删除事件并关闭文件描述符,释放占用的连接资源]
 void cb_func(client_data *user_data)
 {
     epoll_ctl(epollfd, EPOLL_CTL_DEL, user_data->sockfd, 0); //从内核事件表删除事件
@@ -101,6 +99,7 @@ void cb_func(client_data *user_data)
     Log::get_instance()->flush();
 }
 
+//显示错误函数
 void show_error(int cfd, const char *info)
 {
     printf("%s", info);
@@ -133,6 +132,8 @@ void show_error(int cfd, const char *info)
 //     // users_timer[cfd].timer = timer;
 //     timer_lst.add_timer(timer);
 // }
+
+//往cfd连接上添加定时器
 void time_tw(client_data *users_timer, int cfd)
 {
     time_t cur = time(NULL); /*基于时间轮的定时器*/
@@ -142,7 +143,7 @@ void time_tw(client_data *users_timer, int cfd)
     users_timer[cfd].timer = timer; //添加到定时器结构中
 }
 
-// lt 模式
+// LT 模式
 int lfd_lt(int lfd, struct sockaddr_in &client_address, socklen_t &client_len, http_conn *users, client_data *users_timer)
 {
     int cfd = accept(lfd, (struct sockaddr *)&client_address, &client_len); // 该连接分配的文件描述符
@@ -166,11 +167,11 @@ int lfd_lt(int lfd, struct sockaddr_in &client_address, socklen_t &client_len, h
     users_timer[cfd].address = client_address;
     users_timer[cfd].sockfd = cfd;
 
-    time_tw(users_timer, cfd);
+    time_tw(users_timer, cfd); //添加定时器
     return 0;
 }
 
-//et 模式
+//ET 模式
 int lfd_et(int lfd, struct sockaddr_in &client_address, socklen_t &client_len, http_conn *users, client_data *users_timer)
 {
     int cfd = accept(lfd, (struct sockaddr *)&client_address, &client_len);
@@ -195,7 +196,7 @@ int lfd_et(int lfd, struct sockaddr_in &client_address, socklen_t &client_len, h
     return 0;
 }
 
-int lfd_deal(int lfd, struct sockaddr_in &client_address, socklen_t &client_len, http_conn *users, client_data *users_timer)
+int lfd_deal(int lfd, struct sockaddr_in &client_address, socklen_t &client_len, http_conn *users, client_data *users_timer, bool is_et, bool is_one_shot)
 {
     int cfd = accept(lfd, (struct sockaddr *)&client_address, &client_len);
     if (cfd < 0)
@@ -216,6 +217,8 @@ int lfd_deal(int lfd, struct sockaddr_in &client_address, socklen_t &client_len,
     users_timer[cfd].sockfd = cfd;
 
     time_tw(users_timer, cfd); //设置定时器
+
+    addfd(epollfd, cfd, is_et, is_one_shot);
     return 0;
 }
 
@@ -353,39 +356,37 @@ int main(int argc, char *argv[])
                 socklen_t client_len = sizeof(client_address);
 
                 /*边缘触发和水平触发区别：lt只有数据未读取完就一直触发， et只触发一次，不管是否读取完整*/
-                // edge triger边缘触发 处理
-                if (is_et)
+
+                if (!is_et) //level trigged 水平触发处理
+                {
+                    // int ret = lfd_lt(lfd, client_address, client_len, users, users_timer);
+                    int ret = lfd_deal(lfd, client_address, client_len, users, users_timer, is_et, is_one_shot);
+                    if (ret == 1)
+                        continue;
+                }
+                else // edge triger边缘触发 处理
                 {
                     while (1) //隐藏,et用while以保证读取完整
                     {
-                        int ret = lfd_deal(lfd, client_address, client_len, users, users_timer);
+                        int ret = lfd_deal(lfd, client_address, client_len, users, users_timer, is_et, is_one_shot);
                         // int ret = lfd_et(lfd, client_address, client_len, users, users_timer);
                         if (ret == 1)
                             break;
                     }
-                    continue;
                 }
-                else //level trigged 水平触发处理
-                {
-                    // int ret = lfd_lt(lfd, client_address, client_len, users, users_timer);
-                    int ret = lfd_deal(lfd, client_address, client_len, users, users_timer);
-                    if (ret == 1)
-                        continue;
-                }
+                continue;
             }
 
             //事件二:对端关闭连接事件(异常事件)
             else if (events[i].events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR))
             {
                 //服务器端关闭连接，移除对应的定时器
-                // util_timer *timer = users_timer[sockfd].timer;
                 tw_timer *timer = users_timer[sockfd].timer;
                 timer->cb_func(&users_timer[sockfd]);
 
                 if (timer)
                 {
                     tw.del_timer(timer);
-                    // timer_lst.del_timer(timer);
                 }
             }
 

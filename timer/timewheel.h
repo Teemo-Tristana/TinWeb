@@ -29,7 +29,7 @@ si越小,定时器精度越高, 一般可以好几个轮,类似水表
 #include <stdio.h>
 #include <netinet/in.h>
 
-const int BUF_SIZE = 64;
+const int BUF_SIZE = 64; //循环数组大小
 
 class tw_timer;
 
@@ -39,7 +39,6 @@ struct client_data
     sockaddr_in address; //客户端socket地址
     int sockfd;          //socket文件描述符
     tw_timer *timer;     //定时器
-    // char buf[BUF_SIZE];
 };
 
 //定时器类
@@ -57,7 +56,7 @@ public:
     tw_timer(int rot, int ts) : next(nullptr), prev(nullptr), rotation(rot), time_slot(ts) {}
 };
 
-//时间轮
+//时间轮：利用在同一个槽链表上的定时器相差 时间轮的 整数倍的特性
 class time_wheel
 {
 private:
@@ -89,7 +88,8 @@ public:
         }
     }
 
-    //根据指定的timeout创建一个定时器,并插入对应的槽中,以123.6s为例 O(1)
+    //根据指定的timeout创建一个定时器,并插入对应的槽中,以123.6s为例
+    //插入 O(1)
     tw_timer *add_timer(int timeout)
     {
         if (timeout < 0)
@@ -154,7 +154,9 @@ public:
         }
     }
 
-    //滴答函数: SI时间后,调用该函数,时间论向前滚动一个槽的间隔  执行 O(n)有一个遍历过程
+    //滴答函数: SI时间后,调用该函数,时间论轮向前滚动一个槽的间隔  执行 O(n)有一个遍历过程
+    //执行过程如下：查看当前槽上的定时器轮数是否为 0,不是，则轮数-1.执行下一个
+    //执行O(n)
     void tick()
     {
         tw_timer *temp = slots[cur_slot];
@@ -195,7 +197,6 @@ public:
             }
         }
         cur_slot = (cur_slot + 1) % N; //更新时间论的当前槽,以表示时间轮的转动
-        // cur_slot = ++cur_slot % N; //更新时间论的当前槽,以表示时间轮的转动
     }
 };
 

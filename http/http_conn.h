@@ -12,6 +12,7 @@ http模块:
     > http中两种状态:
         > 主状态机
         > 从状态机
+        主状态机内部调用从状态机，从状态机驱动主状态机
 */
 
 #ifndef HTTPCONNECTION_H
@@ -64,7 +65,7 @@ public:
     };
 
     //解析客户请求时,主状态机状态
-    enum CHECK_STATE
+    enum MAIN_STATUS
     {
         CHECK_STATE_REQUESTLINE = 0, //当前正在分析请求行
         CHECK_STATE_HEADER,          //当前正在分析头部字段
@@ -72,7 +73,7 @@ public:
     };
 
     //从状态机状态
-    enum LINE_STATUS
+    enum CONG_STATUS
     {
         LINE_OK = 0, //读取一个完整行
         LINE_BAD,    //行出错
@@ -93,25 +94,23 @@ public:
     };
 
 public:
-    // 所有socket上的事件都被注册带同一个epoll内核事件表中，因此将epoll文件描述符设置静态点
-    static int m_epollfd;
+    static int m_epollfd;    // 所有socket上的事件都被注册带同一个epoll内核事件表中，因此将epoll文件描述符设置静态点
     static int m_user_count; //用户数量
     MYSQL *mysql;
 
 private:
-    // 该HTTP的连接socket和对端地址
-    int m_sockfd;
+    int m_sockfd; // 该HTTP的连接socket和对端地址
     sockaddr_in m_address;
 
     /*以下是解析请求报文中的对应的6个变量,存储读取文的名称*/
     char m_read_buf[READ_BUFFER_SIZE];   //读缓冲区
-    int m_read_idx;                      //标识读缓冲区中已读入客户数据的最后一个字节的下一个位置
-    int m_checked_idx;                   //当前正在分析的字符在读缓冲区的位置
-    int m_start_line;                    //当前正在解析行的起始位置
+    int alread_read_idx;                 //标识读缓冲区中已读入客户数据的最后一个字节的下一个位置
+    int cur_checked_idx;                 //当前正在分析的字符在读缓冲区的位置
+    int cur_start_line;                  //当前正在解析行的起始位置
     char m_write_buf[WRITE_BUFFER_SIZE]; //写缓冲区
-    int m_write_idx;                     //写缓冲区中待发点字节数
+    int need_write_idx;                  //写缓冲区中待发点字节数
 
-    CHECK_STATE m_check_state; //主状态机当前所处状态
+    MAIN_STATUS m_check_state; //主状态机当前所处状态
     METHOD m_method;           //请求方法
 
     //http请求相关分析
@@ -131,7 +130,7 @@ private:
     struct iovec m_iv[2]; //io向量机制iovec
     int m_iv_count;       //被写内存块的数量
 
-    int cgi;        //是否启用的POST
+    int ispost;     //是否启用的POST
     char *m_string; //存储请求头数据
 
     int bytes_to_send;   //待发送的字节数
@@ -163,12 +162,12 @@ private:
     bool process_write(HTTP_CODE ret); //填充HTTP应答(向m_write_buf中写入响应报文)
 
     /*以下函数被process_read调用以分析HTTP请求*/
-    HTTP_CODE parse_request_line(char *text);               //主状态机解析报文中的请求行数据
-    HTTP_CODE parse_headers(char *text);                    //主状态机解析报文中的请求头部数据
-    HTTP_CODE parse_content(char *text);                    //主状态机解析报文中的请求内容
-    HTTP_CODE do_request();                                 //生成响应报文
-    char *get_line() { return m_read_buf + m_start_line; }; //get_line用于将指针往后偏移,指向未处理的字符, m_start_line是已解析的字符,
-    LINE_STATUS parse_line();                               //从状态机读取并分析一行
+    HTTP_CODE parse_request_line(char *text);                 //主状态机解析报文中的请求行数据
+    HTTP_CODE parse_headers(char *text);                      //主状态机解析报文中的请求头部数据
+    HTTP_CODE parse_content(char *text);                      //主状态机解析报文中的请求内容
+    HTTP_CODE do_request();                                   //生成响应报文
+    char *get_line() { return m_read_buf + cur_start_line; }; //get_line用于将指针往后偏移,指向未处理的字符, m_start_line是已解析的字符,
+    CONG_STATUS parse_line();                                 //从状态机读取并分析一行
 
     /*以下函数被process_write()调用填充HTTP应答*/
     void unmap(); // 解除mmap的映射

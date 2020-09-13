@@ -150,11 +150,11 @@ void http_conn::init()
     m_version = 0;
     m_content_length = 0;
     m_host = 0;
-    m_start_line = 0;
-    m_checked_idx = 0;
-    m_read_idx = 0;
-    m_write_idx = 0;
-    cgi = 0;
+    cur_start_line = 0;
+    cur_checked_idx = 0;
+    alread_read_idx = 0;
+    need_write_idx = 0;
+    ispost = 0;
     memset(m_read_buf, '\0', READ_BUFFER_SIZE);
     memset(m_write_buf, '\0', WRITE_BUFFER_SIZE);
     memset(m_real_file, '\0', FILENAME_LEN);
@@ -162,8 +162,8 @@ void http_conn::init()
 
 bool http_conn::cfd_LT()
 {
-    int bytes_read = recv(m_sockfd, m_read_buf + m_read_idx, READ_BUFFER_SIZE - m_read_idx, 0);
-    m_read_idx += bytes_read;
+    int bytes_read = recv(m_sockfd, m_read_buf + alread_read_idx, READ_BUFFER_SIZE - alread_read_idx, 0);
+    alread_read_idx += bytes_read;
     if (bytes_read <= 0)
         return false;
     return true;
@@ -174,7 +174,7 @@ bool http_conn::cfd_ET()
 {
     while (1)
     {
-        int bytes_read = recv(m_sockfd, m_read_buf + m_read_idx, READ_BUFFER_SIZE - m_read_idx, 0);
+        int bytes_read = recv(m_sockfd, m_read_buf + alread_read_idx, READ_BUFFER_SIZE - alread_read_idx, 0);
         if (-1 == bytes_read)
         {
             if (errno == EAGAIN || errno == EWOULDBLOCK)
@@ -185,7 +185,7 @@ bool http_conn::cfd_ET()
         {
             return false;
         }
-        m_read_idx += bytes_read;
+        alread_read_idx += bytes_read;
     }
     return true;
 }
@@ -193,7 +193,7 @@ bool http_conn::cfd_ET()
 //一次性读完数据
 bool http_conn::read_once(bool is_et)
 {
-    if (m_read_idx >= READ_BUFFER_SIZE)
+    if (alread_read_idx >= READ_BUFFER_SIZE)
     {
         return false;
     }
@@ -225,7 +225,7 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char *text)
     else if (strcasecmp(method, "POST") == 0)
     {
         m_method = POST;
-        cgi = 1;
+        ispost = 1;
     }
     else
         return BAD_REQUEST;
@@ -259,30 +259,30 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char *text)
 }
 
 //从状态机， 用于解析出一行内容(http中一行是以\r\n为结束标志的)， \r或\n单独出现在一行中表示出错
-http_conn::LINE_STATUS http_conn::parse_line()
+http_conn::CONG_STATUS http_conn::parse_line()
 {
     char temp = '0';
-    for (; m_checked_idx < m_read_idx; ++m_checked_idx)
+    for (; cur_checked_idx < alread_read_idx; ++cur_checked_idx)
     {
-        temp = m_read_buf[m_checked_idx];
+        temp = m_read_buf[cur_checked_idx];
         if (temp == '\r')
         {
-            if ((m_checked_idx + 1) == m_read_idx)
+            if ((cur_checked_idx + 1) == alread_read_idx)
                 return LINE_OPEN;
-            else if (m_read_buf[m_checked_idx + 1] == '\n')
+            else if (m_read_buf[cur_checked_idx + 1] == '\n')
             {
-                m_read_buf[m_checked_idx++] = '\0';
-                m_read_buf[m_checked_idx++] = '\0';
+                m_read_buf[cur_checked_idx++] = '\0';
+                m_read_buf[cur_checked_idx++] = '\0';
                 return LINE_OK;
             }
             return LINE_BAD;
         }
         else if (temp == '\n')
         {
-            if (m_checked_idx > 1 && m_read_buf[m_checked_idx - 1] == '\r')
+            if (cur_checked_idx > 1 && m_read_buf[cur_checked_idx - 1] == '\r')
             {
-                m_read_buf[m_checked_idx - 1] = '\0';
-                m_read_buf[m_checked_idx++] = '\0';
+                m_read_buf[cur_checked_idx - 1] = '\0';
+                m_read_buf[cur_checked_idx++] = '\0';
                 return LINE_OK;
             }
             return LINE_BAD;
@@ -336,7 +336,7 @@ http_conn::HTTP_CODE http_conn::parse_headers(char *text)
 //判断http请求是否被完整读入
 http_conn::HTTP_CODE http_conn::parse_content(char *text)
 {
-    if (m_read_idx >= (m_content_length + m_checked_idx))
+    if (alread_read_idx >= (m_content_length + cur_checked_idx))
     {
         text[m_content_length] = '\0';
         //POST请求中最后为输入的用户名和密码
@@ -349,14 +349,14 @@ http_conn::HTTP_CODE http_conn::parse_content(char *text)
 //将主从状态机进行封装,对报文的每一行进行循环处理
 http_conn::HTTP_CODE http_conn::process_read()
 {
-    LINE_STATUS line_status = LINE_OK;
+    CONG_STATUS line_status = LINE_OK;
     HTTP_CODE ret = NO_REQUEST;
     char *text = 0;
 
     while ((m_check_state == CHECK_STATE_CONTENT && line_status == LINE_OK) || ((line_status = parse_line()) == LINE_OK))
     {
         text = get_line();
-        m_start_line = m_checked_idx;
+        cur_start_line = cur_checked_idx;
         LOG_INFO("%s", text);
         Log::get_instance()->flush();
         switch (m_check_state)
@@ -408,7 +408,7 @@ http_conn::HTTP_CODE http_conn::do_request()
     const char *p = strrchr(m_url, '/'); //在m_url中找到/最后出现的位置
 
     //处理cgi: 登陆和注册校验
-    if (cgi == 1 && (*(p + 1) == '2' || *(p + 1) == '3'))
+    if (ispost == 1 && (*(p + 1) == '2' || *(p + 1) == '3'))
     {
 
         //根据标志判断是登录检测还是注册检测
@@ -664,7 +664,7 @@ bool http_conn::write()
         {
             //不在继续发送头部消息
             m_iv[0].iov_len = 0;
-            m_iv[1].iov_base = m_file_address + (bytes_have_send - m_write_idx);
+            m_iv[1].iov_base = m_file_address + (bytes_have_send - need_write_idx);
             m_iv[1].iov_len = bytes_to_send;
         }
         else //否则继续发送第一个iovec头部消息数据
@@ -696,17 +696,17 @@ bool http_conn::write()
 //添加响应
 bool http_conn::add_response(const char *format, ...)
 {
-    if (m_write_idx >= WRITE_BUFFER_SIZE)
+    if (need_write_idx >= WRITE_BUFFER_SIZE)
         return false;
     va_list arg_list;
     va_start(arg_list, format);
-    int len = vsnprintf(m_write_buf + m_write_idx, WRITE_BUFFER_SIZE - 1 - m_write_idx, format, arg_list);
-    if (len >= (WRITE_BUFFER_SIZE - 1 - m_write_idx))
+    int len = vsnprintf(m_write_buf + need_write_idx, WRITE_BUFFER_SIZE - 1 - need_write_idx, format, arg_list);
+    if (len >= (WRITE_BUFFER_SIZE - 1 - need_write_idx))
     {
         va_end(arg_list);
         return false;
     }
-    m_write_idx += len;
+    need_write_idx += len;
     va_end(arg_list);
     LOG_INFO("request:%s", m_write_buf);
     Log::get_instance()->flush();
@@ -797,7 +797,7 @@ bool http_conn::process_write(HTTP_CODE ret)
 
             //第一个iovec指针指向响应报文缓冲区，长度指向m_write_idx
             m_iv[0].iov_base = m_write_buf;
-            m_iv[0].iov_len = m_write_idx;
+            m_iv[0].iov_len = need_write_idx;
 
             //第二个iovec指针指向mmap返回的文件指针，长度指向文件大小
             m_iv[1].iov_base = m_file_address;
@@ -805,7 +805,7 @@ bool http_conn::process_write(HTTP_CODE ret)
 
             m_iv_count = 2;
             //发送的全部数据为响应报文头部信息和文件大小
-            bytes_to_send = m_write_idx + m_file_stat.st_size;
+            bytes_to_send = need_write_idx + m_file_stat.st_size;
 
             return true;
         }
@@ -823,9 +823,9 @@ bool http_conn::process_write(HTTP_CODE ret)
     }
     //除FILE_REQUEST状态外，其余状态只申请一个iovec，指向响应报文缓冲区
     m_iv[0].iov_base = m_write_buf;
-    m_iv[0].iov_len = m_write_idx;
+    m_iv[0].iov_len = need_write_idx;
     m_iv_count = 1;
-    bytes_to_send = m_write_idx;
+    bytes_to_send = need_write_idx;
     return true;
 }
 

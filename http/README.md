@@ -24,7 +24,7 @@ Other
         - 7 显示关注界面 POST   
     - 根据校验结果,跳转到对于的页面
     - 对数据库的操作也需要通过锁来同步
-     ![http_get_post](./files/GET_POST_process.png)
+     ![http_get_post](./files/GET_POST_process.png) 
 
 HTTP模块
 ==================================
