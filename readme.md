@@ -46,7 +46,7 @@ TinWeb测试
 * 修改http_conn.cpp中的root路径
 
     ```C++
-//提前安装mysql在mysql数据库下自动创建库名和表明(可指定)
+    //提前安装mysql在mysql数据库下自动创建库名和表明(可指定)
     string url = "localhost";
     string nameuser = "root";
     string passwd = "root";
