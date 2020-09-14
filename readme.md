@@ -71,20 +71,6 @@ Linux下C++轻量级Web服务器，助力初学者快速实践网络编程，搭
 
 > * I/O复用方式，listenfd和connfd可以使用不同的触发模式，代码中使用LT + LT模式，可以自由修改与搭配.
 
-- [x] LT + LT模式
-	* listenfd触发模式，关闭main.c中listenfdET，打开listenfdLT
-	    
-	    ```C++
-	    26 //#define listenfdET       //边缘触发非阻塞
-	    27 #define listenfdLT         //水平触发阻塞
-	    ```
-	
-	* connfd触发模式，关闭http_conn.cpp中connfdET，打开connfdLT
-	    
-	    ```C++
-	    7 //#define connfdET       //边缘触发非阻塞
-	    8 #define connfdLT         //水平触发阻塞
-	    ```
 
 - [ ] LT + ET模式
 	* listenfd触发模式，打开main.c中listenfdET，关闭listenfdLT
@@ -173,11 +159,4 @@ Requests: 78708 susceed, 0 failed
 ```
 Speed=1134156 pages/min, 2117068 bytes/sec.
 Requests: 94513 susceed, 0 failed.
-```
-
-
-+ 社长版：链表定时器 + myql
-```
-Speed=1123788 pages/min, 2097715 bytes/sec.
-Requests: 93649 susceed, 0 failed.
 ```
