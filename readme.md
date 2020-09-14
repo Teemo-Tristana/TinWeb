@@ -34,33 +34,36 @@ Linux下C++用来学习的Web服务器，结合之前的学习，搭建轻量级
 
     ```C++
     // root root修改为服务器数据库的登录名和密码
-	// qgydb修改为上述创建的yourdb库名
     connPool->init("localhost", "root", "root", "yourdb", 3306, 8);
     ```
 
 * 修改http_conn.cpp中的root路径
 
     ```C++
-	// 修改为root文件夹所在路径
-    const char* doc_root="/home/qgy/TinyWebServer/root";
+//提前安装mysql在mysql数据库下自动创建库名和表明(可指定)
+    string url = "localhost";
+    string nameuser = "root";
+    string passwd = "root";
+    string dbname = "tinywebdb"; 
+    string tbname = "userinfo";
+    //建立数据库和表
+    create(url, nameuser, passwd, MYSQL_CONNECTION_PORT, dbname, tbname);
+
+    // 创建数据库连接池
+    connection_pool *connPool = connection_pool::GetInstance();
+    connPool->init(url, nameuser, passwd, dbname, 3306, MYSQL_CONNECTION_NUMBER);
     ```
 
-* 生成server
+* 生成并启动server
 
     ```C++
     make server
     ```
-
-* 启动server
-
-    ```C++
-    ./server port
-    //eg: ./server 12345
-    ```
+    xxx# ./server port
+    //eg: xxx# ./server 12345
 
 * 浏览器端访问：
-
-    ```C++
+    ```
     ip:port
     //eg：http://49.234.91.121:12345
     ```
