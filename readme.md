@@ -29,11 +29,6 @@ TinWeb测试
 * 采用数据库保存用户和密码，因此需要提前安装mysql[本项目中使用的Mysql 8.0.21 ]
 
 * util 中的 create 指定数据库名和表名即可【可以指定也可以使用默认的方式】
-```C++
-    //提前安装mysql
-    string dbname =  "tinywebdb";//"tinywebdb";
-    string tbname = "userinfo";
-```
 * 测试前确认已安装MySQL数据库
 
 * 修改main.c中的数据库初始化信息
@@ -47,17 +42,7 @@ TinWeb测试
 
     ```C++
     //提前安装mysql在mysql数据库下自动创建库名和表明(可指定)
-    string url = "localhost";
-    string nameuser = "root";
-    string passwd = "root";
-    string dbname = "tinywebdb"; 
-    string tbname = "userinfo";
-    //建立数据库和表
-    create(url, nameuser, passwd, MYSQL_CONNECTION_PORT, dbname, tbname);
-
-    // 创建数据库连接池
-    connection_pool *connPool = connection_pool::GetInstance();
-    connPool->init(url, nameuser, passwd, dbname, 3306, MYSQL_CONNECTION_NUMBER);
+    const char *root = "/home/ubuntu16_04/learnGit/TinWeb/root"; //root目录下存放请求的资源和html文件
     ```
 
 * 生成并启动server
