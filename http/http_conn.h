@@ -39,7 +39,7 @@ http模块:
 #include <sys/uio.h>
 
 #include "../lock/locker.h"
-#include "../CGImysql/sql_connection_pool.h"
+#include "../connectionPool/sql_connection_pool.h"
 
 #include "../userdata/redis.h"
 

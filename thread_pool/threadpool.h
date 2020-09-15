@@ -18,7 +18,8 @@
 #include <pthread.h>
 
 #include "../lock/locker.h"
-#include "../CGImysql/sql_connection_pool.h"
+#include "../connectionPool/sql_connection_pool.h"
+
 using namespace std;
 /*线程池类,定义为模板类便于代码复用 模板参数T是任务类*/
 

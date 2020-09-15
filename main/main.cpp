@@ -24,9 +24,10 @@
 #include "../timer/timewheel.h"
 #include "../http/http_conn.h"
 #include "../log/log.h"
-#include "../CGImysql/sql_connection_pool.h"
 
-#include "../utils/createTable.h"
+#include "../connectionPool/sql_connection_pool.h"
+
+// #include "../utils/createTable.h"
 
 const int MAX_FD = 65536;           //最大文件描述符
 const int MAX_EVENT_NUMBER = 10000; //最大事件数
