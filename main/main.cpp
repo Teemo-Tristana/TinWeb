@@ -27,7 +27,7 @@
 
 #include "../connectionPool/sql_connection_pool.h"
 
-// #include "../utils/createTable.h"
+#include "../utils/createTable.h"
 
 const int MAX_FD = 65536;           //最大文件描述符
 const int MAX_EVENT_NUMBER = 10000; //最大事件数
@@ -248,6 +248,7 @@ int main(int argc, char *argv[])
     string dbname = "tinywebdb"; //"tinywebdb";
     string tbname = "userinfo";
     //建立数据库和表
+
     create(url, nameuser, passwd, MYSQL_CONNECTION_PORT, dbname, tbname);
 
     // 创建数据库连接池
