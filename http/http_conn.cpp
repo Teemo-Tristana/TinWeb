@@ -251,6 +251,7 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char *text)
 
     if (!m_url || m_url[0] != '/')
         return BAD_REQUEST;
+
     //当url为/时，显示判断界面
     if (strlen(m_url) == 1)
         strcat(m_url, "judge.html");
@@ -399,7 +400,7 @@ http_conn::HTTP_CODE http_conn::process_read()
 http_conn::HTTP_CODE http_conn::do_request()
 {
 
-    //使用redis
+    // 使用redis
     // redis_clt *m_redis = redis_clt::getinstance();
     strcpy(m_real_file, root);
     int len = strlen(root);
@@ -407,13 +408,11 @@ http_conn::HTTP_CODE http_conn::do_request()
     //找到 url 中 / 所在位置,进而判断 / 后的第一个字符
     const char *p = strrchr(m_url, '/'); //在m_url中找到/最后出现的位置
 
-    //处理cgi: 登陆和注册校验
+    //采用post方法:登陆和注册校验
     if (ispost == 1 && (*(p + 1) == '2' || *(p + 1) == '3'))
     {
-
         //根据标志判断是登录检测还是注册检测
-        char flag = m_url[1];
-
+        // char flag = m_url[1];
         char *m_url_real = (char *)malloc(sizeof(char) * 200);
         strcpy(m_url_real, "/");
         strcat(m_url_real, m_url + 2);
@@ -426,49 +425,19 @@ http_conn::HTTP_CODE http_conn::do_request()
         char name[100], password[100];
         int i = 0;
 
-        printf("m_string : %s\n", m_string);
+        // printf("m_string : %s\n", m_string);
 
         //以&为分隔符,前面是用户名,后面是密码
-        for (i = 5; m_string[i] != '&'; ++i)
+        for (i = 5; m_string[i] != '&'; ++i)//i=5的原因: user= 这里有5个字符
             name[i - 5] = m_string[i];
         name[i - 5] = '\0';
 
         int j = 0;
-        for (i = i + 10; m_string[i] != '\0'; ++i, ++j)
+        for (i = i + 10; m_string[i] != '\0'; ++i, ++j) // + 10的原因： &password= 共10个字符
             password[j] = m_string[i];
         password[j] = '\0';
-        /*********************/
 
-        /*
-        //调试输出,真正允许时需要注释掉
-        for (auto it = userInfo.begin(); it != userInfo.end(); ++it)
-        {
-            cout << "name:" << it->first << "\tpassword:" << it->second << endl;
-        }
-
-        printf("*(p+1) = %c\n", *(p + 1));
-
-*/
-
-        /*同步线程
-        if (*(p + 1) == '3') //注册校验
-        {
-            //
-            bool hasKey = m_redis->is_key_exist(name);
-            if (hasKey) //已注册
-            {
-                cout << "在 redis 中已经存在关键字: " << name << endl;
-                strcpy(m_url, "/registerError.html");
-            }
-            else //未注册
-            {
-                cout << "写入 redis 中\n";
-                m_redis->setUserpasswd(name, password);
-                strcpy(m_url, "/log.html");
-            }
-            //
-        */
-        printf("*(p+1) = %c\n", *(p + 1));
+        // printf("*(p+1) = %c\n", *(p + 1));
 
         if (*(p + 1) == '3')
         {
@@ -502,21 +471,7 @@ http_conn::HTTP_CODE http_conn::do_request()
         //登陆校验
         else if (*(p + 1) == '2')
         {
-            /*
-            // if (m_redis->getUserpasswd(name) == password)
-            if (userInfo.find(name))
-            {
-                // cout <<"使用 redis 测试登录\n";
-                strcpy(m_url, "/welcome.html");
-            }
-            else
-            {
-                strcpy(m_url, "/logError.html");
-            }
-            //
 
-            */
-            //直接判断浏览器端输入的用户名和密码在userInfo是否中可以查找到，返回1，否则返回0
             if (userInfo.find(name) != userInfo.end() && userInfo[name] == password)
                 strcpy(m_url, "/welcome.html");
             else
@@ -565,7 +520,9 @@ http_conn::HTTP_CODE http_conn::do_request()
         free(m_url_real);
     }
     else //否则发送 url 实际请求的文件
+    {
         strncpy(m_real_file + len, m_url, FILENAME_LEN - len - 1);
+    }
 
     if (stat(m_real_file, &m_file_stat) < 0)
         return NO_RESOURCE;
