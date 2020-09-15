@@ -67,8 +67,7 @@ void closeconnection(MYSQL *conn)
     mysql_close(conn);
 }
 
-void create(string url,string user ,string passWord ,int port = 3306,
-string dbname = "tinywebdb", string tbname = "userinfo")
+void create(string url,string user ,string passWord ,int port = 3306, string dbname = "tinywebdb", string tbname = "userinfo")
 {
 
 
