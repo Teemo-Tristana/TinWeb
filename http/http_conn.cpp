@@ -30,8 +30,9 @@ const char *error_404_form = "The requested file was not found on this server.\n
 const char *error_500_title = "Internal Error";
 const char *error_500_form = "There was an unusual problem serving the request file.\n";
 
-const char *root = "/home/ubuntu16_04/learnGit/TinWeb/root"; //root目录下存放请求的资源和html文件
-map<string, string> userInfo;                                //将数据库的用户名和密码载入到服务器的map中, key是用户名,value是密码
+const char *root = "/home/ubuntu16_04/TinWeb/root";
+// const char *root = "/home/ubuntu16_04/learnGit/TinWeb/root"; //root目录下存放请求的资源和html文件
+map<string, string> userInfo; //将数据库的用户名和密码载入到服务器的map中, key是用户名,value是密码
 locker m_lock;
 /****************************************epollf模块:epoll相关函数****************************************/
 //将文件描述符设置非阻塞
@@ -428,7 +429,7 @@ http_conn::HTTP_CODE http_conn::do_request()
         // printf("m_string : %s\n", m_string);
 
         //以&为分隔符,前面是用户名,后面是密码
-        for (i = 5; m_string[i] != '&'; ++i)//i=5的原因: user= 这里有5个字符
+        for (i = 5; m_string[i] != '&'; ++i) //i=5的原因: user= 这里有5个字符
             name[i - 5] = m_string[i];
         name[i - 5] = '\0';
 
