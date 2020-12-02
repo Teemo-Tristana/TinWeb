@@ -21,11 +21,12 @@
  *      智能指针、lambad表达式、condition_variable 、function相关
  *    explicit关键字、显示构造
  *    默认构造、默认移动构造、
+ *    线程池中默认线程的选取问题(如何计算)
  *    
 */
 
 // 线程池数量
-const int THREAD_NUMBER = 8;
+static const int THREAD_NUMBER = 8;
 
 class ThreadPool{
     
@@ -91,6 +92,8 @@ class ThreadPool{
             std::queue<std::function<void()>> tasks;
         };
         std::shared_ptr<Pool> t_pool;
+
+
         
 
 };

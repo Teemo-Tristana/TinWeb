@@ -3,6 +3,9 @@
         "string": "cpp",
         "iostream": "cpp",
         "ostream": "cpp",
-        "core": "cpp"
+        "core": "cpp",
+        "thread": "cpp",
+        "*.tcc": "cpp",
+        "mutex": "cpp"
     }
 }
