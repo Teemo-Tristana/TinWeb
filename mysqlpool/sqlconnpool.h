@@ -11,8 +11,15 @@
 
 #include "../log/log.h"
 
+
+/**
+ * 
+*/
+
+
 // 默认连接数量
 const int SQLCONN_NUMBER = 12;
+
 
 class SqlConnPool{
     public:

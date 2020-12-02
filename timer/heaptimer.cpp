@@ -6,6 +6,7 @@ inline HeapTimer::HeapTimer()
     v_heap.reserve(HEAP_DEFAULT_NUM);
 }
 
+
 inline HeapTimer::~HeapTimer()
 {
     clear();
