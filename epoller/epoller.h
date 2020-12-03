@@ -14,7 +14,7 @@ const int MAXNUMBER = 1024;
 
 class Epoller{
     public:
-        explicit Epoller(int maxEvent = 1024);
+        explicit Epoller(int maxEvents = 1024);
 
         ~Epoller();
 
@@ -24,7 +24,7 @@ class Epoller{
 
         bool deleteFd(int fd);
 
-        int waitTime(int timeout = -1);
+        int waitTime(int timeoutMs = -1);
 
         int getFdOfEvent(size_t i) const;
 

@@ -29,8 +29,9 @@
 static const int THREAD_NUMBER = 8;
 
 class ThreadPool{
-    
-    explicit  ThreadPool(size_t threadCount = THREAD_NUMBER):t_pool(std::make_shared<Pool>())
+
+    public:
+        explicit  ThreadPool(size_t threadCount = THREAD_NUMBER):t_pool(std::make_shared<Pool>())
     {
         assert(threadCount > 0);
 
@@ -58,11 +59,11 @@ class ThreadPool{
         }
     }
 
-    ThreadPool() = default;
+        ThreadPool() = default;
 
-    ThreadPool(ThreadPool&&) = default;
+        ThreadPool(ThreadPool&&) = default;
 
-    ~ThreadPool()
+        ~ThreadPool()
     {
         if (static_cast<bool>(t_pool))
         {
@@ -72,16 +73,16 @@ class ThreadPool{
         t_pool->cond.notify_all();
     }
 
-    template<class T>
-    void addTasks(T&& task)
-    {
+        template<class T>
+        void addTask(T&& task)
         {
-            std::lock_guard<std::mutex> locker(t_pool->mtx);
-            t_pool->tasks.emplace(std::forward<T>(task));
-        }
+            {
+                std::lock_guard<std::mutex> locker(t_pool->mtx);
+                t_pool->tasks.emplace(std::forward<T>(task));
+            }
 
         t_pool->cond.notify_one();
-    }
+        }
 
     private:
         struct Pool
