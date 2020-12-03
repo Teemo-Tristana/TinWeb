@@ -88,6 +88,7 @@ ssize_t HttpConn::write(int* saveErrno)
 
     do
     {
+        // 往 iov 里写
         len = writev(hc_fd, iov, hc_iovCnt);
         if (len < 0)
         {
@@ -95,6 +96,7 @@ ssize_t HttpConn::write(int* saveErrno)
             break;
         }
 
+        // 传输结束
         if ((iov[0].iov_len + iov[1].iov_len) == 0)
             break;
         else if (static_cast<size_t>(len) > iov[0].iov_len)
@@ -114,6 +116,42 @@ ssize_t HttpConn::write(int* saveErrno)
             iov[0].iov_len -= len;
             writeBuff.updateReadPos(len);
         }
-    }while (isET || toWriteBytes() > 102400);
+    }while (isET || toWriteBytes() > 10240);
     return len;
+}
+
+bool HttpConn::process()
+{
+    request.init();
+    if (readBuff.readableBytes() <= 0)
+    {
+            return false;
+    }
+    else if (request.parse(readBuff))
+    {
+        LOG_DEBUG("%s", request.path().c_str());
+        response.init(hc_srcDir, request.path(), request.isKeepAlive(), 200);
+    }
+    else 
+    {
+        response.init(hc_srcDir, request.path(), false, 400);
+    }
+
+
+    response.makeResponse(writeBuff);
+
+    iov[0].iov_base = const_cast<char*>(writeBuff.peek());
+    iov[0].iov_len = writeBuff.readableBytes();;
+    hc_iovCnt = 1;
+
+    if (response.fileLen() >  0 && response.file())
+    {
+        iov[1].iov_base = response.file();
+        iov[1].iov_len = response.fileLen();
+        hc_iovCnt = 2;
+    }
+
+    LOG_DEBUG("filesize : %d, %d to %d", response.fileLen(), hc_iovCnt, toWriteBytes());
+    return true;
+
 }
